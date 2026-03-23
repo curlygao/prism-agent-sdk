@@ -1,6 +1,6 @@
 {
   "name": "@curlygao/prism-agent-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Prism Agent SDK - AI Assistant SDK with session management, tool calling, and LLM provider support",
   "type": "module",
   "files": [
