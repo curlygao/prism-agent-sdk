@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "title": "Prism Agent SDK 配置示例",
+  "description": "复制此文件到 ~/.prism-agent/config.json 并填入您的 API Key",
+
+  "agents": {
+    "defaults": {
+      "model": "zhipu/glm-4",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "maxIterations": 20
+    }
+  },
+
+  "providers": {
+    "zhipu": {
+      "apiKey": "your-zhipu-api-key",
+      "apiBase": "https://open.bigmodel.cn/api/paas/v4/",
+      "model": "glm-4"
+    },
+    "openai": {
+      "apiKey": "your-openai-api-key",
+      "apiBase": "https://api.openai.com/v1",
+      "model": "gpt-4"
+    },
+    "anthropic": {
+      "apiKey": "your-anthropic-api-key",
+      "apiBase": "https://api.anthropic.com",
+      "model": "claude-3-5-sonnet-20241022"
+    },
+    "deepseek": {
+      "apiKey": "your-deepseek-api-key",
+      "apiBase": "https://api.deepseek.com/v1",
+      "model": "deepseek-chat"
+    },
+    "openrouter": {
+      "apiKey": "your-openrouter-api-key",
+      "apiBase": "https://openrouter.ai/api/v1"
+    }
+  },
+
+  "tools": {
+    "filesystem": {
+      "enabled": true,
+      "allowedPaths": ["~"]
+    },
+    "terminal": {
+      "enabled": true,
+      "timeoutSeconds": 60
+    },
+    "web": {
+      "enabled": true
+    }
+  },
+
+  "mcp": {
+    "servers": []
+  }
+}

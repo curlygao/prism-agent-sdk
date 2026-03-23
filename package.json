@@ -1,0 +1,46 @@
+{
+  "name": "@curlygao/prism-agent-sdk",
+  "version": "0.1.0",
+  "description": "Prism Agent SDK - AI Assistant SDK with session management, tool calling, and LLM provider support",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./sdk": {
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js",
+      "require": "./dist/sdk/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "eventemitter3": "^5.0.1",
+    "glob": "^13.0.6",
+    "gray-matter": "^4.0.3",
+    "openai": "^6.32.0",
+    "zod": "^4.3.6"
+  },
+  "optionalDependencies": {
+    "@google/generative-ai": "^0.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsup": "^8.0.0",
+    "typescript": "~5.3.0",
+    "vitest": "^1.2.0"
+  }
+}
