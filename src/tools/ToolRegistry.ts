@@ -104,4 +104,25 @@ export class ToolRegistry {
   listTools(): string[] {
     return Array.from(this.tools.keys());
   }
+
+  /**
+   * 转换为 Vercel AI SDK 工具格式
+   */
+  toVercelAITools(): Record<string, {
+    description: string;
+    parameters: any;
+  }> {
+    const tools = Array.from(this.tools.values());
+    const result: Record<string, { description: string; parameters: any }> = {};
+
+    for (const tool of tools) {
+      const openAIFunc = tool.getOpenAIFunction();
+      result[tool.name] = {
+        description: openAIFunc.function.description,
+        parameters: openAIFunc.function.parameters,
+      };
+    }
+
+    return result;
+  }
 }
