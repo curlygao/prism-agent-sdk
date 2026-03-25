@@ -246,8 +246,59 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 | #2 Message Format Conversion | **C**: 使用 Vercel AI 官方转换（如 `toVercelAI()`） |
 | #3 Model Selection | **A**: 保持前缀方式 `anthropic/claude-xxx` → `createAnthropic().model('claude-xxx')` |
 | #4 Tool Continuation Flow | 现有 AgentLoop for 循环模式适用 |
-| #5 Provider 缓存 | 待定：是否缓存 Provider/Model 实例 |
-| #6 Tool Result 格式 | 待定：AgentLoop 执行工具后如何将结果返回给 Vercel AI SDK |
+| #5 Provider 缓存 | **C**: Provider + Model 都缓存 |
+| #6 Tool Result 格式 | **A**: 通过 messages 数组返回工具结果 |
+
+### Provider 缓存策略
+
+```typescript
+class VercelAIManager {
+  private providerCache = new Map<string, AI>();
+  private modelCache = new Map<string, LanguageModelV1>();
+
+  getModel(provider: string, model: string, config: ProviderConfig): LanguageModelV1 {
+    // 1. 获取或创建 Provider 实例
+    let aiProvider = this.providerCache.get(provider);
+    if (!aiProvider) {
+      aiProvider = this.createProvider(provider, config);
+      this.providerCache.set(provider, aiProvider);
+    }
+
+    // 2. 获取或创建 Model 实例
+    const modelKey = `${provider}:${model}`;
+    let languageModel = this.modelCache.get(modelKey);
+    if (!languageModel) {
+      languageModel = aiProvider.languageModel(model);
+      this.modelCache.set(modelKey, languageModel);
+    }
+
+    return languageModel;
+  }
+}
+```
+
+### Tool Result 返回格式
+
+AgentLoop 执行工具后，将结果通过 messages 数组返回：
+
+```typescript
+// 工具结果消息格式
+const toolMessage = {
+  role: 'tool',
+  content: JSON.stringify(toolResult),  // 工具返回结果的 JSON 字符串
+  toolCallId: toolCall.toolCallId,      // Vercel AI 生成的唯一 ID
+};
+
+// 添加到 messages
+messages.push(toolMessage);
+
+// 重新调用 streamText() 继续对话
+const result = await streamText({
+  model: languageModel,
+  messages,
+  // ...
+});
+```
 
 ### Provider Configuration Details
 
