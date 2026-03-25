@@ -2,40 +2,31 @@
  * Agent 循环引擎
  *
  * 负责处理用户消息、调用 LLM、执行工具、管理对话状态
- * 基于 Part 架构重构
+ * 基于 Vercel AI SDK streamText() 重构
  */
 
 import { EventEmitter } from 'eventemitter3';
-import type { Message, AgentContext, AgentResponse, AgentOptions, ToolCall } from '../types';
-import type { Part } from '../types/parts';
+import { streamText, type CoreMessage } from 'ai';
+import type { Message, AgentContext, AgentResponse, AgentOptions } from '../types';
 import type { IStorageAPI } from '../storage/types';
 import { ToolRegistry } from '../tools/ToolRegistry';
-import { BaseProvider } from '../providers/BaseProvider';
-import { StreamProcessor, StreamEvent } from './StreamProcessor';
-import { PartFactory } from '../utils/PartFactory';
+import { vercelAIManager, VercelAIManager, type ProviderConfig } from '../vercelai';
+import { TextPartEntity } from '../parts/TextPartEntity';
+import { ReasoningPartEntity } from '../parts/ReasoningPartEntity';
+import { ToolPartEntity } from '../parts/ToolPartEntity';
 
 export interface AgentLoopEvents {
-  // 文本事件
   'text:start': (data: { sessionId: string; messageId: string }) => void;
   'text:delta': (data: { sessionId: string; messageId: string; text: string }) => void;
   'text:done': (data: { sessionId: string; messageId: string }) => void;
-
-  // 思考事件
   'reasoning:start': (data: { sessionId: string; messageId: string }) => void;
   'reasoning:delta': (data: { sessionId: string; messageId: string; text: string }) => void;
   'reasoning:done': (data: { sessionId: string; messageId: string }) => void;
-
-  // 工具调用 - 生成阶段
-  'tool:call:start': (data: { sessionId: string; messageId: string }) => void;
+  'tool:call:start': (data: { sessionId: string; messageId: string; callId: string; toolName: string; arguments: any }) => void;
   'tool:call:done': (data: { sessionId: string; messageId: string; callId: string; toolName: string; arguments: any }) => void;
-  'tool:call:interrupt': (data: { sessionId: string; messageId: string }) => void;
-
-  // 工具调用 - 执行阶段
   'tool:execute:start': (data: { sessionId: string; messageId: string; callId: string; toolName: string; arguments: any }) => void;
   'tool:execute:done': (data: { sessionId: string; messageId: string; callId: string; toolName: string; result: any; duration: number }) => void;
   'tool:execute:error': (data: { sessionId: string; messageId: string; callId: string; toolName: string; error: string }) => void;
-
-  // 完成和错误
   'done': () => void;
   'error': (error: Error) => void;
 }
@@ -43,42 +34,35 @@ export interface AgentLoopEvents {
 export class AgentLoop extends EventEmitter<AgentLoopEvents> {
   private maxIterations: number;
   private toolRegistry: ToolRegistry;
-  private provider: BaseProvider;
+  private vercelAIManager: VercelAIManager;
   private storage: IStorageAPI;
 
   constructor(
     toolRegistry: ToolRegistry,
-    provider: BaseProvider,
+    vercelAIManager: VercelAIManager,
     storage: IStorageAPI,
     options: AgentOptions = {}
   ) {
     super();
     this.toolRegistry = toolRegistry;
-    this.provider = provider;
+    this.vercelAIManager = vercelAIManager;
     this.storage = storage;
     this.maxIterations = options.maxIterations ?? 20;
   }
 
-  /**
-   * 处理用户消息（只支持流式）
-   */
   async processMessage(
     context: AgentContext
   ): Promise<AgentResponse> {
     const messages = this.buildMessages(context);
-    const userMessage = messages[messages.length - 1];
-    // 记录历史消息数量（不包含当前用户消息），用于后续提取新增消息
     const historyCount = context.history.length;
 
-    // Agent 循环
     for (let i = 0; i < this.maxIterations; i++) {
       console.log(`[AgentLoop] 循环 ${i + 1}/${this.maxIterations}, 当前消息数: ${messages.length}`);
 
       try {
-        // 流式响应（使用新架构）
-        const response = await this.processStreamWithParts(messages, context);
+        const response = await this.processStreamWithParts(messages, context, context.workspace);
 
-        console.log(`[AgentLoop] 第 ${i + 1} 轮结果: finishReason=${response.finishReason}, model=${response.model || 'unknown'}`);
+        console.log(`[AgentLoop] 第 ${i + 1} 轮结果: finishReason=${response.finishReason}`);
 
         // 检查是否有工具调用
         const hasToolCalls = response.finishReason === 'tool_calls' &&
@@ -87,17 +71,12 @@ export class AgentLoop extends EventEmitter<AgentLoopEvents> {
 
         if (!hasToolCalls) {
           this.emit('done');
-          // 更新 context.history，包含所有新增消息（用户消息 + 助手消息）
           context.history = messages.slice(historyCount);
           return response;
         }
 
-        // 有工具调用，工具已在 StreamProcessor 中执行完成
-        // 只需处理工具结果并添加到消息历史，然后继续循环
-        await this.addToolResultsToMessages(response.message.parts, messages, context);
-
-        console.log(`[AgentLoop] 工具结果已添加，当前消息数: ${messages.length}`);
-        // 继续下一轮循环，将工具结果发送给 LLM
+        // 有工具调用，继续循环
+        console.log(`[AgentLoop] 工具调用完成，当前消息数: ${messages.length}`);
       } catch (error) {
         const err = error instanceof Error ? error : new Error(String(error));
         this.emit('error', err);
@@ -105,176 +84,234 @@ export class AgentLoop extends EventEmitter<AgentLoopEvents> {
       }
     }
 
-    // 更新 context.history，包含所有新增消息（超过最大迭代次数的情况）
     context.history = messages.slice(historyCount);
     throw new Error('超过最大迭代次数');
   }
 
-  /**
-   * 流式模式处理（使用 Part 架构）
-   */
   private async processStreamWithParts(
     messages: Message[],
-    context: AgentContext
+    context: AgentContext,
+    workspace: string
   ): Promise<AgentResponse> {
-    // 创建 StreamProcessor
-    const processor = new StreamProcessor(
-      this.provider,
-      this.toolRegistry,
-      this.storage
-    );
-
-    // 生成消息 ID
     const messageId = this.generateId('msg');
+    const sessionId = context.sessionId;
 
-    // 处理流式响应
-    const result = await processor.process({
-      messages,
-      sessionId: context.sessionId,
-      messageId,
-      abortSignal: undefined,
-      workspace: context.workspace,
-      onEvent: (event) => {
-        console.log('[AgentLoop] onEvent:', event.type);
-        // 转发事件到 AgentLoop 的事件系统
-        this.forwardEvent(event, context.sessionId, messageId);
+    // 创建 PartEntity 实例
+    let textPart: TextPartEntity | undefined;
+    let reasoningPart: ReasoningPartEntity | undefined;
+    let toolPart: ToolPartEntity | undefined;
+
+    // 转换消息格式
+    const vercelMessages = this.convertMessages(messages);
+
+    // 解析 model 并获取 LanguageModel
+    const { provider, model: modelName } = this.vercelAIManager.parseModel(context.model || 'openai/gpt-4');
+    const providerConfig: ProviderConfig = {};
+    const languageModel = this.vercelAIManager.getModel(provider, modelName, providerConfig);
+
+    let finishReason: string | undefined;
+    let usage: any;
+
+    const result = await streamText({
+      model: languageModel,
+      messages: vercelMessages,
+      system: context.system,
+      tools: this.toolRegistry.toVercelAITools(),
+      toolExecution: 'manual',
+      maxTokens: 4096,
+
+      onTextDelta: (chunk) => {
+        if (!textPart) {
+          textPart = TextPartEntity.create({ messageId, sessionId });
+          this.emit('text:start', { sessionId, messageId });
+        }
+        textPart.appendDelta(chunk.text);
+        this.emit('text:delta', { sessionId, messageId, text: chunk.text });
+      },
+
+      onReasoning: ({ delta }) => {
+        if (!reasoningPart) {
+          reasoningPart = ReasoningPartEntity.create({ messageId, sessionId });
+          this.emit('reasoning:start', { sessionId, messageId });
+        }
+        reasoningPart.appendDelta(delta);
+        this.emit('reasoning:delta', { sessionId, messageId, text: delta });
+      },
+
+      onToolCall: async ({ toolCall }) => {
+        const { toolName, args, toolCallId } = toolCall;
+
+        // 创建 ToolPartEntity
+        toolPart = ToolPartEntity.create({
+          messageId,
+          sessionId,
+          callId: toolCallId,
+          tool: toolName,
+        });
+        toolPart.setPending(args, JSON.stringify(args));
+
+        this.emit('tool:call:start', { sessionId, messageId, callId: toolCallId, toolName, arguments: args });
+        this.emit('tool:execute:start', { sessionId, messageId, callId: toolCallId, toolName, arguments: args });
+
+        // 执行工具
+        const startTime = Date.now();
+        try {
+          const toolResult = await this.toolRegistry.execute(toolName, args, { workspace });
+
+          const duration = Date.now() - startTime;
+
+          if (toolResult.success) {
+            toolPart.setCompleted(toolResult.output);
+            this.emit('tool:execute:done', {
+              sessionId,
+              messageId,
+              callId: toolCallId,
+              toolName,
+              result: toolResult.output,
+              duration,
+            });
+          } else {
+            toolPart.setError(toolResult.error || 'Unknown error');
+            this.emit('tool:execute:error', {
+              sessionId,
+              messageId,
+              callId: toolCallId,
+              toolName,
+              error: toolResult.error || 'Unknown error',
+            });
+          }
+
+          // 将工具结果添加到 messages
+          const toolMessage: CoreMessage = {
+            role: 'tool',
+            content: toolResult.output || toolResult.error || '',
+            toolCallId,
+          };
+          messages.push(toolMessage as any);
+
+        } catch (error) {
+          const duration = Date.now() - startTime;
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          toolPart.setError(errorMessage);
+          this.emit('tool:execute:error', {
+            sessionId,
+            messageId,
+            callId: toolCallId,
+            toolName,
+            error: errorMessage,
+          });
+
+          // 添加错误结果到 messages
+          const toolMessage: CoreMessage = {
+            role: 'tool',
+            content: `Error: ${errorMessage}`,
+            toolCallId,
+          };
+          messages.push(toolMessage as any);
+        }
+
+        this.emit('tool:call:done', { sessionId, messageId, callId: toolCallId, toolName, arguments: args });
+      },
+
+      onFinish: (params) => {
+        finishReason = params.finishReason;
+        usage = params.usage;
+
+        if (textPart) {
+          textPart.complete();
+          this.emit('text:done', { sessionId, messageId });
+        }
+        if (reasoningPart) {
+          reasoningPart.complete();
+          this.emit('reasoning:done', { sessionId, messageId });
+        }
+      },
+
+      onError: (error) => {
+        console.error('[AgentLoop] streamText error:', error);
+        this.emit('error', error instanceof Error ? error : new Error(String(error)));
       },
     });
 
-    // 添加助手消息到历史（包含 ToolPart）
-    if (result.message.parts && result.message.parts.length > 0) {
-      messages.push(result.message);
-    }
+    // 完成 streamText 等待
+    await result.wait();
 
-    // 构建响应（新架构：只返回 message 和元数据）
-    const response: AgentResponse = {
-      message: result.message,
-      finishReason: result.finishReason,
-      usage: result.usage,
-      model: result.model,
+    // 构建 assistant message
+    const assistantMessage: Message = {
+      id: messageId,
+      role: 'assistant',
+      parts: [],
+      timestamp: Date.now(),
+      createdAt: Date.now(),
     };
 
-    return response;
-  }
-
-  /**
-   * 转发 StreamProcessor 事件到 AgentLoop 事件系统
-   */
-  private forwardEvent(event: StreamEvent, sessionId: string, messageId: string): void {
-    const baseData = { sessionId, messageId };
-
-    switch (event.type) {
-      // 文本事件
-      case 'text:start':
-        this.emit('text:start', baseData);
-        break;
-      case 'text:delta':
-        this.emit('text:delta', { ...baseData, text: event.data.text });
-        break;
-      case 'text:done':
-        this.emit('text:done', baseData);
-        break;
-
-      // 思考事件
-      case 'reasoning:start':
-        this.emit('reasoning:start', baseData);
-        break;
-      case 'reasoning:delta':
-        this.emit('reasoning:delta', { ...baseData, delta: event.data.text });
-        break;
-      case 'reasoning:done':
-        this.emit('reasoning:done', baseData);
-        break;
-
-      // 工具调用 - 生成阶段
-      case 'tool:call:start':
-        this.emit('tool:call:start', {
-          ...baseData,
-          toolName: event.data.toolName,
-          callId: event.data.callId,
-          arguments: event.data.arguments,
-        });
-        break;
-      case 'tool:call:done':
-        this.emit('tool:call:done', {
-          ...baseData,
-          callId: event.data.callId,
-          toolName: event.data.toolName,
-          arguments: event.data.arguments,
-        });
-        break;
-      case 'tool:call:interrupt':
-        this.emit('tool:call:interrupt', baseData);
-        break;
-
-      // 工具调用 - 执行阶段
-      case 'tool:execute:start':
-        this.emit('tool:execute:start', {
-          ...baseData,
-          callId: event.data.callId,
-          toolName: event.data.toolName,
-          arguments: event.data.arguments,
-        });
-        break;
-      case 'tool:execute:done':
-        this.emit('tool:execute:done', {
-          ...baseData,
-          callId: event.data.callId,
-          toolName: event.data.toolName,
-          result: event.data.result,
-          duration: event.data.duration,
-        });
-        break;
-      case 'tool:execute:error':
-        this.emit('tool:execute:error', {
-          ...baseData,
-          callId: event.data.callId,
-          toolName: event.data.toolName,
-          error: event.data.error,
-        });
-        break;
+    if (textPart) {
+      assistantMessage.parts!.push(textPart.get());
     }
-  }
-
-  /**
-   * 将流式模式中已执行的工具结果添加到消息历史
-   * （流式模式下工具已在 StreamProcessor 中执行完成）
-   */
-  private async addToolResultsToMessages(
-    parts: Part[] | undefined,
-    messages: Message[],
-    context: AgentContext
-  ): Promise<void> {
-    if (!parts) return;
-
-    // 找到所有 ToolPart
-    const toolParts = parts.filter(p => p.type === 'tool') as any[];
-
-    for (const toolPart of toolParts) {
-      const messageId = this.generateId('msg');
-
-      // 创建工具结果消息（复用已有的 ToolPart）
-      messages.push({
-        id: messageId,
-        role: 'tool',
-        parts: [toolPart],
-        timestamp: Date.now(),
-        createdAt: Date.now(),
-      });
+    if (reasoningPart) {
+      assistantMessage.parts!.push(reasoningPart.get());
     }
+    if (toolPart) {
+      assistantMessage.parts!.push(toolPart.get());
+    }
+
+    if (assistantMessage.parts!.length > 0) {
+      messages.push(assistantMessage);
+    }
+
+    return {
+      message: assistantMessage,
+      finishReason: finishReason || 'stop',
+      usage,
+      model: context.model,
+    };
   }
 
   /**
-   * 构建消息列表
+   * 转换 messages 为 Vercel AI 格式
    */
+  private convertMessages(messages: Message[]): CoreMessage[] {
+    return messages.map(msg => {
+      if (msg.role === 'user') {
+        const textPart = msg.parts?.find(p => p.type === 'text') as any;
+        return {
+          role: 'user',
+          content: textPart?.text || '',
+        };
+      }
+      if (msg.role === 'assistant') {
+        const textPart = msg.parts?.find(p => p.type === 'text') as any;
+        return {
+          role: 'assistant',
+          content: textPart?.text || '',
+        };
+      }
+      if (msg.role === 'tool') {
+        const toolPart = msg.parts?.find(p => p.type === 'tool') as any;
+        return {
+          role: 'tool',
+          content: toolPart?.state?.output || '',
+          toolCallId: toolPart?.callID,
+        };
+      }
+      return {
+        role: msg.role,
+        content: JSON.stringify(msg.parts),
+      };
+    }) as CoreMessage[];
+  }
+
   private buildMessages(context: AgentContext): Message[] {
-    // 为当前用户消息创建 TextPart
     const userMessageId = this.generateId('msg');
-    const textPart = PartFactory.createTextPart(context.currentMessage, {
-      sessionId: context.sessionId,
+    const textPart = {
+      id: userMessageId,
       messageId: userMessageId,
-      emitEvent: false,
-    });
+      sessionId: context.sessionId,
+      type: 'text' as const,
+      text: context.currentMessage,
+      createdAt: Date.now(),
+      time: { start: Date.now() },
+    };
 
     const currentUserMessage: Message = {
       id: userMessageId,
@@ -290,16 +327,10 @@ export class AgentLoop extends EventEmitter<AgentLoopEvents> {
     ];
   }
 
-  /**
-   * 生成唯一 ID
-   */
   private generateId(prefix = 'id'): string {
     return `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  /**
-   * 更新最大迭代次数
-   */
   setMaxIterations(max: number): void {
     this.maxIterations = max;
   }
