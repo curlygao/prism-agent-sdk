@@ -9,7 +9,8 @@ import { EventEmitter } from 'eventemitter3';
 import type { Message } from '../types/chat';
 import type { AgentResponse } from '../types/agent';
 import type { IStorageAPI } from '../storage/types';
-import type { BaseProvider } from '../providers/BaseProvider';
+import { vercelAIManager } from '../vercelai';
+import type { ProviderConfig } from '../vercelai';
 import type { ToolRegistry } from '../tools/ToolRegistry';
 import type { SDKEventBus } from './SDKEventBus';
 import type { SessionHandle as SessionHandleInterface, SendOptions, SessionEvent } from './types';
@@ -38,7 +39,7 @@ export class SessionHandle implements SessionHandleInterface {
     sessionId: string,
     projectId: string,
     private storage: IStorageAPI,
-    private provider: BaseProvider,
+    private providerConfig: ProviderConfig,
     private toolRegistry: ToolRegistry,
     private eventBus: SDKEventBus,
     private workspace: string
@@ -51,7 +52,7 @@ export class SessionHandle implements SessionHandleInterface {
     this.emitter = new SessionEventEmitter(sessionId, eventBus);
     this.agentLoop = new AgentLoop(
       toolRegistry,
-      provider,
+      vercelAIManager,
       storage,
       { maxIterations: 20 }
     );
