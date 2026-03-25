@@ -1,7 +1,7 @@
 # Vercel AI Provider & Event System Refactor Design
 
 **Date:** 2026-03-25
-**Status:** Approved
+**Status:** In Review (v2)
 **Author:** Claude
 
 ## Overview
@@ -70,17 +70,45 @@ Refactor the Prism Agent SDK to replace custom provider implementations with Ver
 
 ## Event Mapping
 
+### Internal Events (AgentLoop → PartEntity / SessionEventEmitter)
+
 | Vercel AI 回调 | PartEntity 操作 | SDK 公共事件 |
 |---|---|---|
-| `onTextDelta` | `textPart.appendDelta(delta)` | `text:delta` |
-| `onReasoning` | `reasoningPart.appendDelta(delta)` | `reasoning:delta` |
+| `onTextDelta` | `textPart.appendDelta(delta)` | `text:start` (首次), `text:delta` |
+| `onReasoning` | `reasoningPart.appendDelta(delta)` | `reasoning:start` (首次), `reasoning:delta` |
 | `onToolCall` | `toolPart.setToolCall(toolCall)` | `tool:call:start` |
-| `onToolResult` | `toolPart.setResult(result)` | `tool:call:done` |
+| `onToolCallFinished` | `toolPart.setResult(result)` | `tool:call:done` |
 | `onToolError` | `toolPart.setError(error)` | `tool:error` |
 | `onStepStart` | — | `step:start` |
 | `onStepFinish` | — | `step:finish` |
 | `onError` | — | `agent:error` |
-| `streamText` 完成 | `textPart.complete()` | `agent:done` |
+| `onFinish` | — | `agent:done` (包含 finishReason, usage) |
+
+### 工具执行事件 (由 AgentLoop 在工具执行时产生)
+
+| 事件 | 触发时机 |
+|------|---------|
+| `tool:execute:start` | 开始执行工具时 |
+| `tool:execute:done` | 工具执行成功完成 |
+| `tool:execute:error` | 工具执行失败 |
+| `tool:call:interrupt` | 当 text/reasoning 内容打断 tool call 生成时 |
+
+### Vercel AI Tool Execution 策略
+
+Vercel AI SDK 的 `streamText()` 默认自动执行工具。本设计采用 **手动工具执行模式**：
+
+```typescript
+const result = await streamText({
+  model,
+  messages,
+  system,
+  tools: convertTools(ToolRegistry.getTools()),
+  toolExecution: 'manual', // 禁用自动执行
+  // ...
+});
+```
+
+这样工具调用会通过 `onToolCall` 回调触发，由 AgentLoop 手动执行并通过 `tool:execute:*` 事件暴露。
 
 ## Component Changes
 
@@ -90,7 +118,8 @@ Refactor the Prism Agent SDK to replace custom provider implementations with Ver
 |-----------|--------|
 | `src/providers/` (entire directory) | Replaced by Vercel AI built-in providers |
 | `src/agent/StreamProcessor.ts` | Logic moved to AgentLoop via `streamText()` |
-| `src/events/EventBus.ts` | Only used by PartEntity, which no longer emits events |
+
+> **Note:** `src/events/EventBus.ts` is NOT deleted because it is also used by `AppStateManager` in the application module.
 
 ### Refactor
 
@@ -115,6 +144,10 @@ Refactor the Prism Agent SDK to replace custom provider implementations with Ver
 
 ```typescript
 // ToolRegistry.toVercelAITools()
+// Note: tool.inputSchema is a Zod type, not JSON Schema.
+// Use existing zodToJsonSchema() conversion or getOpenAIFunction().function.parameters.
+import { zodToJsonSchema } from 'zod-to-json-schema';
+
 class ToolRegistry {
   toVercelAITools(): AIJS.ManagedTools {
     const tools = this.getTools();
@@ -122,7 +155,26 @@ class ToolRegistry {
     for (const tool of tools) {
       result[tool.name] = {
         description: tool.description,
-        parameters: tool.inputSchema, // JSON Schema
+        parameters: zodToJsonSchema(tool.inputSchema),
+      };
+    }
+    return result;
+  }
+}
+```
+
+Alternatively, leverage existing `BaseTool.getOpenAIFunction()` which already performs this conversion:
+
+```typescript
+class ToolRegistry {
+  toVercelAITools(): AIJS.ManagedTools {
+    const tools = this.getTools();
+    const result: AIJS.ManagedTools = {};
+    for (const tool of tools) {
+      const openAIFunc = tool.getOpenAIFunction();
+      result[tool.name] = {
+        description: openAIFunc.function.description,
+        parameters: openAIFunc.function.parameters,
       };
     }
     return result;
@@ -147,7 +199,7 @@ src/
 │   └── ToolPartEntity.ts      # REFACTOR - remove emit methods
 │
 ├── events/
-│   └── EventBus.ts            # DELETE (or repurpose for app-level events)
+│   └── EventBus.ts            # KEEP - used by AppStateManager
 │
 ├── tools/
 │   └── ToolRegistry.ts        # KEEP - add toVercelAITools()
@@ -163,6 +215,8 @@ src/
 4. **PartEntity preserved** — Pure data entity with methods, no events
 5. **Dual event architecture** — Internal Vercel AI events → external SDK events
 6. **SDK event naming preserved** — Map `text-start` → `text:start`, etc.
+7. **Manual tool execution** — Use `toolExecution: 'manual'` to maintain control over tool execution and emit `tool:execute:*` events
+8. **Keep EventBus** — Used by `AppStateManager` for application-level events
 
 ## Dependencies
 
@@ -178,4 +232,6 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 ## Open Issues
 
-None — all decisions confirmed with user.
+1. **Provider Configuration** — How to configure provider credentials (API keys) with Vercel AI providers. Need to design provider initialization strategy.
+2. **Context Building** — `ContextManager.buildContext()` currently calls `toProviderMessages()` on BaseProvider. This logic needs to be updated to work with Vercel AI message format (`CoreMessage`).
+3. **Model Selection** — Current model selection via prefix (e.g., `anthropic/claude-3-5-sonnet`) needs to map to Vercel AI provider model strings.
