@@ -1,7 +1,7 @@
 # Vercel AI Provider & Event System Refactor Design
 
 **Date:** 2026-03-25
-**Status:** In Review (v2)
+**Status:** Approved (v3)
 **Author:** Claude
 
 ## Overview
@@ -232,6 +232,38 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 ## Open Issues
 
-1. **Provider Configuration** — How to configure provider credentials (API keys) with Vercel AI providers. Need to design provider initialization strategy.
-2. **Context Building** — `ContextManager.buildContext()` currently calls `toProviderMessages()` on BaseProvider. This logic needs to be updated to work with Vercel AI message format (`CoreMessage`).
-3. **Model Selection** — Current model selection via prefix (e.g., `anthropic/claude-3-5-sonnet`) needs to map to Vercel AI provider model strings.
+All resolved.
+
+| Issue | Decision |
+|-------|----------|
+| #1 Provider Configuration | **C**: config 优先，fallback 到环境变量 |
+| #2 Message Format Conversion | **C**: 使用 Vercel AI 官方转换（如 `toVercelAI()`） |
+| #3 Model Selection | **A**: 保持前缀方式 `anthropic/claude-xxx` → `createAnthropic().model('claude-xxx')` |
+| #4 Tool Continuation Flow | 无需改动，现有 AgentLoop for 循环已支持 |
+
+### Provider Configuration Details
+
+```typescript
+// Provider 初始化策略
+const apiKey = config.apiKey || process.env.OPENAI_API_KEY;
+
+const provider = createOpenAI({
+  apiKey,
+  baseURL: config.baseUrl || undefined,  // 可选
+});
+```
+
+### Model Selection Details
+
+```typescript
+// 解析 model 前缀
+function parseModel(model: string): { provider: string; model: string } {
+  const [prefix, ...rest] = model.split('/');
+  return { provider: prefix, model: rest.join('/') };
+}
+
+// 使用
+const { provider, model } = parseModel('anthropic/claude-3-5-sonnet');
+const aiProvider = createAnthropic({ apiKey: ... });
+const languageModel = aiProvider.languageModel(model);
+```
