@@ -84,18 +84,9 @@ Refactor the Prism Agent SDK to replace custom provider implementations with Ver
 | `onError` | — | `agent:error` |
 | `onFinish` | — | `agent:done` (包含 finishReason, usage) |
 
-### 工具执行事件 (由 AgentLoop 在工具执行时产生)
-
-| 事件 | 触发时机 |
-|------|---------|
-| `tool:execute:start` | 开始执行工具时 |
-| `tool:execute:done` | 工具执行成功完成 |
-| `tool:execute:error` | 工具执行失败 |
-| `tool:call:interrupt` | 当 text/reasoning 内容打断 tool call 生成时 |
-
 ### Vercel AI Tool Execution 策略
 
-Vercel AI SDK 的 `streamText()` 默认自动执行工具。本设计采用 **手动工具执行模式**：
+Vercel AI SDK 配置为 **manual 模式**（`toolExecution: 'manual'`）：
 
 ```typescript
 const result = await streamText({
@@ -103,12 +94,29 @@ const result = await streamText({
   messages,
   system,
   tools: convertTools(ToolRegistry.getTools()),
-  toolExecution: 'manual', // 禁用自动执行
+  toolExecution: 'manual', // SDK 不自动执行，由 AgentLoop 控制
   // ...
 });
 ```
 
-这样工具调用会通过 `onToolCall` 回调触发，由 AgentLoop 手动执行并通过 `tool:execute:*` 事件暴露。
+**工作流程：**
+1. LLM 返回工具调用
+2. Vercel AI SDK 触发 `onToolCall` 回调，通知 AgentLoop
+3. AgentLoop 从 ToolRegistry 找到工具并执行
+4. AgentLoop 发射 `tool:execute:*` 事件
+5. AgentLoop 将结果返回给 Vercel AI SDK
+6. SDK 继续处理（更多文本/更多工具调用/结束）
+
+> **注：** Vercel AI SDK 的 "manual" 模式对本工程来说是"完全控制"——AgentLoop 控制工具执行的开始、结果和事件发射。
+
+### 工具执行事件 (由 AgentLoop 产生)
+
+| 事件 | 触发时机 |
+|------|---------|
+| `tool:execute:start` | 开始执行工具时 |
+| `tool:execute:done` | 工具执行成功完成 |
+| `tool:execute:error` | 工具执行失败 |
+| `tool:call:interrupt` | 当 text/reasoning 内容打断 tool call 生成时 |
 
 ## Component Changes
 
@@ -232,14 +240,14 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 
 ## Open Issues
 
-All resolved.
-
 | Issue | Decision |
 |-------|----------|
 | #1 Provider Configuration | **C**: config 优先，fallback 到环境变量 |
 | #2 Message Format Conversion | **C**: 使用 Vercel AI 官方转换（如 `toVercelAI()`） |
 | #3 Model Selection | **A**: 保持前缀方式 `anthropic/claude-xxx` → `createAnthropic().model('claude-xxx')` |
-| #4 Tool Continuation Flow | 无需改动，现有 AgentLoop for 循环已支持 |
+| #4 Tool Continuation Flow | 现有 AgentLoop for 循环模式适用 |
+| #5 Provider 缓存 | 待定：是否缓存 Provider/Model 实例 |
+| #6 Tool Result 格式 | 待定：AgentLoop 执行工具后如何将结果返回给 Vercel AI SDK |
 
 ### Provider Configuration Details
 
