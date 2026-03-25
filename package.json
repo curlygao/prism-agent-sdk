@@ -27,7 +27,11 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@ai-sdk/google": "^1.0.0",
+    "@ai-sdk/openai": "^1.0.0",
     "@anthropic-ai/sdk": "^0.80.0",
+    "ai": "^4.0.0",
     "eventemitter3": "^5.0.1",
     "glob": "^13.0.6",
     "gray-matter": "^4.0.3",
