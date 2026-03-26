@@ -4,7 +4,6 @@ export { SDKEventBus } from './SDKEventBus';
 export { ToolsModule } from './ToolsModule';
 export { StorageModule } from './StorageModule';
 export { ApplicationModule } from './ApplicationModule';
-export { ProvidersModule } from './ProvidersModule';
 
 // SessionManager 和相关组件
 export { SessionManager } from './SessionManager';

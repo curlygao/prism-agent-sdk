@@ -13,22 +13,7 @@ import { SessionManager } from '../SessionManager';
 import { SDKEventBus } from '../SDKEventBus';
 import { SessionBusyError, SessionClosedError } from '../errors';
 import type { IStorageAPI, ProjectMeta, StorageSessionMeta } from '../../storage/types';
-import type { BaseProvider } from '../../providers/BaseProvider';
 import type { ToolRegistry } from '../../tools/ToolRegistry';
-
-/**
- * Mock Provider - 模拟 LLM 提供商
- */
-class MockProvider implements BaseProvider {
-  name = 'mock';
-  apiBase = 'https://mock.api';
-  apiKey = 'mock-key';
-
-  async *chatStream() {
-    yield { type: 'content', data: 'Mock response' };
-    return { type: 'end', data: { finishReason: 'stop', model: 'mock-model' } };
-  }
-}
 
 /**
  * 创建 Mock Storage API
@@ -114,27 +99,44 @@ function createMockStorage(): IStorageAPI {
  * 创建 Mock ToolRegistry
  */
 function createMockToolRegistry(): ToolRegistry {
-  return {
+  const mockRegistry = {
     getTool: vi.fn(() => null),
     listTools: vi.fn(() => []),
     getOpenAIFunctions: vi.fn(() => []),
+    toVercelAITools: vi.fn(() => ({})),
+    register: vi.fn(),
+    execute: vi.fn().mockResolvedValue({ success: true, output: 'mock result' }),
   } as unknown as ToolRegistry;
+  return mockRegistry;
+}
+
+/**
+ * 创建 Mock SDKEventBus
+ */
+function createMockEventBus(): SDKEventBus {
+  const bus = new SDKEventBus();
+  // Mock internalEmit to actually emit events
+  const originalInternalEmit = bus.internalEmit.bind(bus);
+  (bus as any).internalEmit = vi.fn((event: string, data: any) => {
+    originalInternalEmit(event, data);
+  });
+  return bus;
 }
 
 describe('并行会话集成测试', () => {
   let sessionManager: SessionManager;
   let mockStorage: IStorageAPI;
-  let mockProvider: BaseProvider;
   let mockToolRegistry: ToolRegistry;
+  let mockEventBus: SDKEventBus;
 
   beforeEach(() => {
     mockStorage = createMockStorage();
-    mockProvider = new MockProvider();
     mockToolRegistry = createMockToolRegistry();
+    mockEventBus = createMockEventBus();
     sessionManager = new SessionManager(
       mockStorage,
-      mockProvider,
       mockToolRegistry,
+      mockEventBus,
       '/test/workspace'
     );
   });

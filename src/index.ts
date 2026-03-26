@@ -5,7 +5,8 @@ export * from './agent';
 export * from './application';
 export * from './events';
 export * from './parts';
-export * from './providers';
+// Providers removed - using Vercel AI SDK instead
+// export * from './providers';
 export * from './storage';
 export * from './tools';
 export * from './types';

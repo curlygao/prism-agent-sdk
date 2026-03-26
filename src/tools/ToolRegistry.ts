@@ -87,7 +87,7 @@ export class ToolRegistry {
 
       return {
         success: true,
-        output: JSON.stringify(result),
+        output: result === undefined ? '' : JSON.stringify(result),
       };
     } catch (error) {
       return {

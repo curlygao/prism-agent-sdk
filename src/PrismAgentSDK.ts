@@ -5,7 +5,6 @@ import { SDKEventBus } from './sdk/SDKEventBus';
 import { ToolsModule } from './sdk/ToolsModule';
 import { StorageModule } from './sdk/StorageModule';
 import { ApplicationModule } from './sdk/ApplicationModule';
-import { ProvidersModule } from './sdk/ProvidersModule';
 import { SessionManager } from './sdk/SessionManager';
 
 // 导入内部实现
@@ -18,7 +17,6 @@ import { ToolRegistry } from './tools/ToolRegistry';
 import { ReadFileTool, WriteFileTool, ListDirTool } from './tools/FileTool';
 import { ExecCommandTool } from './tools/TerminalTool';
 import { HttpGetTool } from './tools/WebTool';
-import { ProviderManager } from './providers/ProviderManager';
 import { NodeFileSystem } from './storage/utils/fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -39,7 +37,6 @@ export class PrismAgentSDK {
   readonly tools: ToolsModule;
   readonly storage: StorageModule;
   readonly app: ApplicationModule;
-  readonly providers: ProvidersModule;
 
   constructor(options: PrismAgentOptions) {
     const {
@@ -79,33 +76,18 @@ export class PrismAgentSDK {
     toolRegistry.register(new ExecCommandTool() as any);
     toolRegistry.register(new HttpGetTool() as any);
 
-    // 创建 Provider 管理
-    const providerManager = new ProviderManager();
-    providerManager.initFromConfigManager(configManager);
-
     // 创建事件总线
     const sdkEvents = new SDKEventBus();
-
-    // 获取默认 provider，根据 agents.defaults.model 中的 provider 前缀选择
-    const agentDefaults = configManager.getAgentDefaults();
-    let defaultProviderName: string | undefined;
-    if (agentDefaults.model && agentDefaults.model.includes('/')) {
-      // model 格式为 "provider/model"，提取 provider 名称
-      defaultProviderName = agentDefaults.model.split('/')[0];
-    }
-    const provider = providerManager.getProvider(defaultProviderName);
 
     // 创建各模块
     this.events = sdkEvents;
     this.storage = new StorageModule(this._storage);
     this.app = applicationModule;
     this.tools = new ToolsModule(toolRegistry);
-    this.providers = new ProvidersModule(providerManager);
 
     // 创建 SessionManager，传入共享的事件总线
     this.sessions = new SessionManager(
       this._storage,
-      provider,  // 使用获取的 provider
       toolRegistry,
       sdkEvents,  // 传入共享的事件总线
       workingDir

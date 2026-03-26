@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SessionManager } from '../SessionManager';
+import { SDKEventBus } from '../SDKEventBus';
 import type { IStorageAPI, ProjectMeta, StorageSessionMeta } from '../../storage/types';
-import type { BaseProvider } from '../../providers/BaseProvider';
 import type { ToolRegistry } from '../../tools/ToolRegistry';
 import { SessionNotFoundError } from '../errors';
 
 describe('SessionManager', () => {
   let manager: SessionManager;
   let mockStorage: IStorageAPI;
-  let mockProvider: BaseProvider;
   let mockToolRegistry: ToolRegistry;
+  let mockEventBus: SDKEventBus;
   let mockProject: ProjectMeta;
   let mockSessionMeta: StorageSessionMeta;
 
@@ -29,8 +29,11 @@ describe('SessionManager', () => {
       deleteSession: vi.fn(),
     } as unknown as IStorageAPI;
 
-    mockProvider = {} as BaseProvider;
-    mockToolRegistry = {} as ToolRegistry;
+    mockToolRegistry = {
+      toVercelAITools: vi.fn().mockReturnValue({}),
+    } as unknown as ToolRegistry;
+
+    mockEventBus = new SDKEventBus();
 
     mockProject = {
       id: 'project-1',
@@ -50,7 +53,7 @@ describe('SessionManager', () => {
       updatedAt: Date.now(),
     };
 
-    manager = new SessionManager(mockStorage, mockProvider, mockToolRegistry, '/workspace');
+    manager = new SessionManager(mockStorage, mockToolRegistry, mockEventBus, '/workspace');
   });
 
   afterEach(async () => {

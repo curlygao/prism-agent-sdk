@@ -7,27 +7,28 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { AgentLoop } from '../AgentLoop';
 import type { IStorageAPI } from '../../storage/types';
-import type { BaseProvider } from '../../providers/BaseProvider';
 import { ToolRegistry } from '../../tools/ToolRegistry';
+import type { VercelAIManager } from '../../vercelai';
 import {
   createMockStorage,
-  createMockProvider,
+  createMockVercelAIManager,
   createMockToolRegistry,
   createTestAgentContext,
   createTestEventCollector,
   createMockStreamChunks,
+  createTestMessage,
 } from '../../__tests__/mocks';
 
 describe('AgentLoop', () => {
   let agentLoop: AgentLoop;
   let mockStorage: IStorageAPI;
-  let mockProvider: BaseProvider;
+  let mockVercelAIManager: VercelAIManager;
   let mockToolRegistry: ToolRegistry;
   let eventCollector: ReturnType<typeof createTestEventCollector>;
 
   beforeEach(() => {
     mockStorage = createMockStorage();
-    mockProvider = createMockProvider({
+    mockVercelAIManager = createMockVercelAIManager({
       content: 'Hello! How can I help you?',
     });
     mockToolRegistry = createMockToolRegistry();
@@ -35,7 +36,7 @@ describe('AgentLoop', () => {
 
     agentLoop = new AgentLoop(
       mockToolRegistry,
-      mockProvider,
+      mockVercelAIManager,
       mockStorage,
       { maxIterations: 10 }
     );
@@ -62,7 +63,7 @@ describe('AgentLoop', () => {
     it('应该正确初始化配置', () => {
       const loop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage,
         { maxIterations: 20 }
       );
@@ -95,7 +96,7 @@ describe('AgentLoop', () => {
     it('应该使用默认最大迭代次数', () => {
       const loop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -116,14 +117,14 @@ describe('AgentLoop', () => {
         arguments: { query: 'test' },
       };
 
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'I will help you with that',
         toolCalls: [toolCall],
       });
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage,
         { maxIterations: 10 }
       );
@@ -147,14 +148,14 @@ describe('AgentLoop', () => {
         arguments: { input: 'test data' },
       };
 
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'Processing...',
         toolCalls: [toolCall],
       });
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -182,14 +183,14 @@ describe('AgentLoop', () => {
         { id: 'call-3', name: 'test_tool', arguments: { index: 2 } },
       ];
 
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'Running multiple tools',
         toolCalls,
       });
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -213,20 +214,20 @@ describe('AgentLoop', () => {
   describe('循环控制', () => {
     it('应该在无工具调用时退出循环', async () => {
       let callCount = 0;
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'Simple response',
       });
 
       // 监控 chat 调用次数
-      const originalChat = mockProvider.chat;
-      mockProvider.chat = vi.fn(async (...args) => {
+      const originalChat = mockVercelAIManager.chat;
+      mockVercelAIManager.chat = vi.fn(async (...args) => {
         callCount++;
         return originalChat(...args);
       }) as any;
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage,
         { maxIterations: 10 }
       );
@@ -243,14 +244,14 @@ describe('AgentLoop', () => {
 
     it('应该遵守最大迭代次数限制', async () => {
       // 模拟一个会持续调用工具的场景
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'I will call a tool',
         toolCalls: [{ id: 'call-loop', name: 'test_tool', arguments: {} }],
       });
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage,
         { maxIterations: 2 }  // 设置较小的限制
       );
@@ -267,7 +268,7 @@ describe('AgentLoop', () => {
     it('应该允许动态更新最大迭代次数', () => {
       const loop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage,
         { maxIterations: 10 }
       );
@@ -289,14 +290,14 @@ describe('AgentLoop', () => {
         textContent: ['Hello', ' there', '!'],
       });
 
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'Hello there!',
         streamChunks,
       });
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -318,14 +319,14 @@ describe('AgentLoop', () => {
         ],
       });
 
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'I will use tools',
         streamChunks,
       });
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -340,13 +341,13 @@ describe('AgentLoop', () => {
     });
 
     it('应该正确触发流式事件', async () => {
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'Streamed response',
       });
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -366,13 +367,13 @@ describe('AgentLoop', () => {
 
   describe('错误处理', () => {
     it('应该传播 Provider 错误', async () => {
-      mockProvider = createMockProvider();
+      mockVercelAIManager = createMockVercelAIManager();
       const error = new Error('Provider API failed');
-      mockProvider.chat = vi.fn().mockRejectedValue(error);
+      mockVercelAIManager.chat = vi.fn().mockRejectedValue(error);
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -419,7 +420,7 @@ describe('AgentLoop', () => {
       const registry = new ToolRegistry();
       registry.register(mockTool as any);
 
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'I will use the failing tool',
         toolCalls: [
           { id: 'call-fail', name: 'failing_tool', arguments: {} },
@@ -428,7 +429,7 @@ describe('AgentLoop', () => {
 
       agentLoop = new AgentLoop(
         registry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -449,7 +450,7 @@ describe('AgentLoop', () => {
     });
 
     it('应该处理工具未找到的情况', async () => {
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: 'I will use unknown tool',
         toolCalls: [
           { id: 'call-unknown', name: 'unknown_tool', arguments: {} },
@@ -458,7 +459,7 @@ describe('AgentLoop', () => {
 
       agentLoop = new AgentLoop(
         mockToolRegistry,  // 只包含 test_tool
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -515,14 +516,14 @@ describe('AgentLoop', () => {
     });
 
     it('应该处理空内容的响应', async () => {
-      mockProvider = createMockProvider({
+      mockVercelAIManager = createMockVercelAIManager({
         content: '',
         toolCalls: [],
       });
 
       agentLoop = new AgentLoop(
         mockToolRegistry,
-        mockProvider,
+        mockVercelAIManager,
         mockStorage
       );
 
@@ -549,7 +550,7 @@ describe('AgentLoop', () => {
       await agentLoop.processMessage(context, false);
 
       // 验证消息被正确构建（通过检查 provider 的调用）
-      expect(mockProvider.chat).toHaveBeenCalled();
+      expect(mockVercelAIManager.chat).toHaveBeenCalled();
     });
 
     it('应该保持历史消息结构', async () => {
@@ -568,7 +569,7 @@ describe('AgentLoop', () => {
 
       await agentLoop.processMessage(context, false);
 
-      expect(mockProvider.chat).toHaveBeenCalled();
+      expect(mockVercelAIManager.chat).toHaveBeenCalled();
     });
   });
 });

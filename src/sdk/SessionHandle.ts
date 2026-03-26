@@ -10,7 +10,6 @@ import type { Message } from '../types/chat';
 import type { AgentResponse } from '../types/agent';
 import type { IStorageAPI } from '../storage/types';
 import { vercelAIManager } from '../vercelai';
-import type { ProviderConfig } from '../vercelai';
 import type { ToolRegistry } from '../tools/ToolRegistry';
 import type { SDKEventBus } from './SDKEventBus';
 import type { SessionHandle as SessionHandleInterface, SendOptions, SessionEvent } from './types';
@@ -39,7 +38,6 @@ export class SessionHandle implements SessionHandleInterface {
     sessionId: string,
     projectId: string,
     private storage: IStorageAPI,
-    private providerConfig: ProviderConfig,
     private toolRegistry: ToolRegistry,
     private eventBus: SDKEventBus,
     private workspace: string

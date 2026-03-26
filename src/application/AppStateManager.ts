@@ -41,7 +41,7 @@ export class AppStateManager {
    */
   setCurrentProject(project: ProjectMeta | null): void {
     this.currentProject = project;
-    this.eventBus.emit('project:changed', { type: 'project:changed', data: project });
+    this.eventBus.emit('project:changed', project);
   }
 
   /**
@@ -49,7 +49,7 @@ export class AppStateManager {
    */
   clearCurrentProject(): void {
     this.currentProject = null;
-    this.eventBus.emit('project:changed', { type: 'project:changed', data: null });
+    this.eventBus.emit('project:changed', null);
   }
 
   // ========== 处理状态 ==========
@@ -69,10 +69,7 @@ export class AppStateManager {
       isProcessing,
       currentTask: task || null,
     };
-    this.eventBus.emit('processing:changed', {
-      type: 'processing:changed',
-      data: this.processingState,
-    });
+    this.eventBus.emit('processing:changed', this.processingState);
   }
 
   /**

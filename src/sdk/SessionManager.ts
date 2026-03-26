@@ -5,7 +5,6 @@
  */
 
 import type { IStorageAPI, ProjectMeta, StorageSessionMeta } from '../storage/types';
-import type { BaseProvider } from '../providers/BaseProvider';
 import type { ToolRegistry } from '../tools/ToolRegistry';
 import type { CreateSessionOptions, SessionInfo } from './types';
 import { SessionHandle } from './SessionHandle';
@@ -18,19 +17,16 @@ export class SessionManager {
   private currentProject: ProjectMeta | null = null;
   private eventBus: SDKEventBus;
   private storage: IStorageAPI;
-  private provider: BaseProvider;
   private toolRegistry: ToolRegistry;
   private workspace: string;
 
   constructor(
     storage: IStorageAPI,
-    provider: BaseProvider,
     toolRegistry: ToolRegistry,
     eventBus: SDKEventBus,  // 传入共享的事件总线
     workspace: string
   ) {
     this.storage = storage;
-    this.provider = provider;
     this.toolRegistry = toolRegistry;
     this.workspace = workspace;
     this.eventBus = eventBus;  // 使用传入的事件总线，而不是创建新的
@@ -73,7 +69,6 @@ export class SessionManager {
       sessionMeta.id,
       sessionMeta.projectId,
       this.storage,
-      this.provider,
       this.toolRegistry,
       this.eventBus,
       this.workspace
@@ -126,7 +121,6 @@ export class SessionManager {
       id,
       projectId,
       this.storage,
-      this.provider,
       this.toolRegistry,
       this.eventBus,
       this.workspace

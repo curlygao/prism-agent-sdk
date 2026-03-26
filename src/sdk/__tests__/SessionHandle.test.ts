@@ -4,7 +4,6 @@ import { SessionClosedError, SessionBusyError } from '../errors';
 
 describe('SessionHandle', () => {
   let mockStorage: any;
-  let mockProvider: any;
   let mockToolRegistry: any;
   let mockEventBus: any;
 
@@ -17,48 +16,10 @@ describe('SessionHandle', () => {
       appendMessage: vi.fn().mockResolvedValue(undefined),
     };
 
-    // Mock provider with required method
-    const createMockStream = () => {
-      let callCount = 0;
-      return {
-        async next() {
-          callCount++;
-          if (callCount === 1) {
-            // 第一次调用返回一个简单内容事件
-            return {
-              done: false,
-              value: {
-                type: 'content',
-                data: { text: 'Response' },
-              },
-            };
-          } else if (callCount === 2) {
-            // 第二次调用返回结束
-            return {
-              done: true,
-              value: {
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                model: 'test-model',
-              },
-            };
-          }
-          // 后续调用保持完成状态
-          return { done: true, value: undefined };
-        },
-        [Symbol.asyncIterator]() {
-          return this;
-        },
-      };
-    };
-
-    mockProvider = {
-      chatStream: vi.fn().mockReturnValue(createMockStream()),
-    };
-
     // Mock tool registry with required method
     mockToolRegistry = {
       getOpenAIFunctions: vi.fn().mockReturnValue([]),
+      toVercelAITools: vi.fn().mockReturnValue({}),
     };
 
     // Mock event bus
@@ -72,7 +33,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -89,7 +49,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -107,7 +66,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -149,7 +107,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -165,7 +122,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -183,7 +139,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -202,7 +157,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -220,7 +174,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -244,7 +197,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -264,7 +216,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -286,7 +237,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'
@@ -302,7 +252,6 @@ describe('SessionHandle', () => {
       'session-1',
       'project-1',
       mockStorage,
-      mockProvider,
       mockToolRegistry,
       mockEventBus,
       '/workspace'

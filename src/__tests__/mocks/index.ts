@@ -5,12 +5,12 @@
 
 import { vi } from 'vitest';
 import type { IStorageAPI, Message, ProjectMeta, StorageSessionMeta } from '../../storage/types';
-import type { BaseProvider } from '../../providers/BaseProvider';
 import type { ToolDefinition, ToolExecutionResult, ToolContext } from '../../types/tools';
 import { ToolRegistry } from '../../tools/ToolRegistry';
 import { EventEmitter } from 'eventemitter3';
 import type { AgentLoopEvents } from '../../agent/AgentLoop';
-import type { ChatCompletionResponse } from '../../providers/BaseProvider';
+import type { VercelAIManager } from '../../vercelai';
+import type { LanguageModelV1 } from 'ai';
 
 /**
  * 创建 Mock Storage
@@ -55,54 +55,27 @@ export function createMockStorage(config?: {
 }
 
 /**
- * 创建 Mock Provider
+ * 创建 Mock VercelAIManager
  */
-export function createMockProvider(config?: {
-  content?: string;
-  toolCalls?: any[];
-  reasoning?: string;
-  streamChunks?: Array<string | any>;
-  finishReason?: string;
-}): BaseProvider {
-  const mockProvider = {
-    name: 'mock-provider',
-    apiBase: 'https://mock.api',
-    apiKey: 'mock-key',
-    supportsReasoning: false,
-
-    chat: vi.fn().mockResolvedValue({
-      content: config?.content || 'Mock response',
-      toolCalls: config?.toolCalls || [],
-      reasoning: config?.reasoning,
-      finishReason: config?.finishReason || 'stop',
-      usage: {
-        promptTokens: 10,
-        completionTokens: 20,
-        totalTokens: 30,
-      },
-    } as ChatCompletionResponse),
-
-    async *chatStream() {
-      const chunks = config?.streamChunks || [config?.content || 'Mock response'];
-      for (const chunk of chunks) {
-        yield chunk;
-      }
+export function createMockVercelAIManager(): VercelAIManager {
+  const mockManager = {
+    parseModel: vi.fn((model: string) => {
+      const [provider, ...rest] = model.split('/');
       return {
-        content: config?.content || 'Mock response',
-        toolCalls: config?.toolCalls || [],
-        finishReason: config?.finishReason || 'stop',
-        usage: {
-          promptTokens: 10,
-          completionTokens: 20,
-          totalTokens: 30,
-        },
-      } as ChatCompletionResponse;
-    },
-
-    validateConfig: vi.fn().mockReturnValue(true),
+        provider: provider || 'openai',
+        model: rest.join('/') || 'gpt-4',
+      };
+    }),
+    getModel: vi.fn((provider: string, model: string, config: any) => {
+      // Return a mock LanguageModel
+      const mockModel = {
+        // This is a minimal mock - actual implementation depends on what streamText needs
+      };
+      return mockModel as LanguageModelV1;
+    }),
+    clearCache: vi.fn(),
   };
-
-  return mockProvider as any;
+  return mockManager as any;
 }
 
 /**
