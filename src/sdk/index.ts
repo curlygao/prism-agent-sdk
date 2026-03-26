@@ -1,5 +1,6 @@
 // SDK 模块导出
 
+export { vercelAIManager } from '../vercelai';
 export { SDKEventBus } from './SDKEventBus';
 export { ToolsModule } from './ToolsModule';
 export { StorageModule } from './StorageModule';

@@ -7,6 +7,8 @@ export * from './events';
 export * from './parts';
 // Providers removed - using Vercel AI SDK instead
 // export * from './providers';
+export { VercelAIManager, vercelAIManager } from './vercelai';
+export type { ProviderConfig } from './vercelai';
 export * from './storage';
 export * from './tools';
 export * from './types';
