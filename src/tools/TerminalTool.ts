@@ -72,7 +72,7 @@ export class ExecCommandTool extends BaseTool<
     command: z.string().describe('要执行的命令'),
   });
 
-  async execute(input: { command: string }): Promise<{ stdout: string; stderr: string }> {
+  protected async executeWithValidation(input: { command: string }): Promise<{ stdout: string; stderr: string }> {
     const terminalTool = new TerminalTool();
     return await terminalTool.execCommand(input.command);
   }

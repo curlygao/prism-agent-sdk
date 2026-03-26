@@ -22,7 +22,7 @@ class TestTool extends BaseTool<
     count: z.number().optional().describe('可选计数'),
   });
 
-  async execute(input: { input: string; count?: number }): Promise<{ result: string }> {
+  protected async executeWithValidation(input: { input: string; count?: number }): Promise<{ result: string }> {
     if (input.count) {
       return { result: input.input.repeat(input.count) };
     }
@@ -126,7 +126,7 @@ describe('BaseTool', () => {
           }),
         });
 
-        async execute() {
+        protected async executeWithValidation() {
           return {};
         }
       }
@@ -151,7 +151,7 @@ describe('BaseTool', () => {
           items: z.array(z.string()),
         });
 
-        async execute() {
+        protected async executeWithValidation() {
           return {};
         }
       }
@@ -174,7 +174,7 @@ describe('BaseTool', () => {
           flag: z.boolean(),
         });
 
-        async execute() {
+        protected async executeWithValidation() {
           return {};
         }
       }
@@ -213,7 +213,7 @@ describe('BaseTool', () => {
           value: z.number(),
         });
 
-        async execute() {
+        protected async executeWithValidation() {
           return {};
         }
       }
@@ -260,7 +260,7 @@ describe('BaseTool', () => {
           count: z.number(),
         });
 
-        async execute() {
+        protected async executeWithValidation() {
           return {};
         }
       }
@@ -297,7 +297,7 @@ describe('BaseTool', () => {
 
         inputSchema = z.object({ input: z.string() });
 
-        async execute(input: { input: string }, context?: any): Promise<{ context: string }> {
+        protected async executeWithValidation(input: { input: string }, context?: any): Promise<{ context: string }> {
           return {
             context: context?.sessionId || 'no-context',
           };
@@ -385,7 +385,7 @@ describe('BaseTool', () => {
           optional: z.string().default('default-value'),
         });
 
-        async execute() {
+        protected async executeWithValidation() {
           return {};
         }
       }
@@ -412,7 +412,7 @@ describe('BaseTool', () => {
 
         inputSchema = z.object({ name: z.string() });
 
-        async execute() {
+        protected async executeWithValidation() {
           return {};
         }
       }
@@ -431,7 +431,7 @@ describe('BaseTool', () => {
 
         inputSchema = z.object({ value: z.string() });
 
-        async execute() {
+        protected async executeWithValidation() {
           return {};
         }
       }

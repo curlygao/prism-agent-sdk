@@ -118,7 +118,7 @@ export class SkillTool extends BaseTool {
     }
   }
 
-  async execute(input: z.infer<typeof SkillToolSchema>, context?: ToolContext): Promise<any> {
+  protected async executeWithValidation(input: z.infer<typeof SkillToolSchema>, context?: ToolContext): Promise<any> {
     await this.ensureInitialized();
 
     const skill = this.skills.get(input.name);

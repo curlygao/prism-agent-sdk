@@ -68,7 +68,7 @@ export class ReadFileTool extends BaseTool<
     path: z.string().describe('要读取的文件路径'),
   });
 
-  async execute(input: { path: string }): Promise<{ content: string }> {
+  protected async executeWithValidation(input: { path: string }): Promise<{ content: string }> {
     const fileTool = new FileTool();
     const content = await fileTool.readFile(input.path);
     return { content };
@@ -91,7 +91,7 @@ export class WriteFileTool extends BaseTool<
     content: z.string().describe('要写入的文件内容'),
   });
 
-  async execute(input: { path: string; content: string }): Promise<{ success: boolean }> {
+  protected async executeWithValidation(input: { path: string; content: string }): Promise<{ success: boolean }> {
     const fileTool = new FileTool();
     await fileTool.writeFile(input.path, input.content);
     return { success: true };
@@ -113,7 +113,7 @@ export class ListDirTool extends BaseTool<
     path: z.string().describe('要列出的目录路径'),
   });
 
-  async execute(input: { path: string }): Promise<{ entries: string[] }> {
+  protected async executeWithValidation(input: { path: string }): Promise<{ entries: string[] }> {
     const fileTool = new FileTool();
     const entries = await fileTool.listDir(input.path);
     return { entries };

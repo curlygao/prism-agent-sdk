@@ -25,8 +25,23 @@ export abstract class BaseTool<TInput = any, TOutput = any> {
 
   /**
    * 执行工具
+   * 子类实现时需要调用 super.execute() 以进行输入验证
    */
-  abstract execute(input: TInput, context?: ToolContext): Promise<TOutput>;
+  async execute(input: TInput, context?: ToolContext): Promise<TOutput> {
+    // 验证输入参数
+    const result = this.inputSchema.safeParse(input);
+    if (!result.success) {
+      const error = result.error;
+      throw new Error(`Invalid input: ${error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
+    }
+    return this.executeWithValidation(result.data, context);
+  }
+
+  /**
+   * 执行工具的实际逻辑（由子类实现）
+   * 此方法在输入验证之后被调用
+   */
+  protected abstract executeWithValidation(input: TInput, context?: ToolContext): Promise<TOutput>;
 
   /**
    * 摘要模板（用于生成用户友好的操作描述）
@@ -94,10 +109,14 @@ export abstract class BaseTool<TInput = any, TOutput = any> {
     const required: string[] = [];
 
     for (const [key, value] of Object.entries(shape)) {
+      // 手动检查 ZodOptional - instanceof 检查在 zod v4 中可能不工作
       const zodValue = value as z.ZodTypeAny;
-      properties[key] = this.getZodTypeDescription(zodValue);
+      const innerType = this.unwrapOptional(zodValue);
+      const isOptional = this.isOptional(zodValue);
 
-      if (!zodValue.isOptional()) {
+      properties[key] = this.getZodTypeDescription(innerType);
+
+      if (!isOptional) {
         required.push(key);
       }
     }
@@ -107,6 +126,34 @@ export abstract class BaseTool<TInput = any, TOutput = any> {
       properties,
       required: required.length > 0 ? required : undefined,
     };
+  }
+
+  /**
+   * 检查 ZodType 是否为可选（ZodOptional 或 ZodDefault 都算可选）
+   */
+  private isOptional(zodValue: z.ZodTypeAny): boolean {
+    // ZodOptional 和 ZodDefault 在 zod v4 中都有 isOptional() 返回 true
+    // 但我们用 _def.type 来判断，以正确解包
+    if (zodValue && typeof zodValue === 'object' && '_def' in zodValue) {
+      const def = (zodValue as any)._def;
+      if (def && (def.type === 'optional' || def.type === 'default')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 解包 ZodOptional 或 ZodDefault 获取内部类型
+   */
+  private unwrapOptional(zodValue: z.ZodTypeAny): z.ZodTypeAny {
+    if (zodValue && typeof zodValue === 'object' && '_def' in zodValue) {
+      const def = (zodValue as any)._def;
+      if (def && (def.type === 'optional' || def.type === 'default')) {
+        return def.innerType as z.ZodTypeAny;
+      }
+    }
+    return zodValue;
   }
 
   private getZodTypeDescription(zodValue: z.ZodTypeAny): any {

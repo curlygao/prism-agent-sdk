@@ -23,7 +23,7 @@ export class HttpGetTool extends BaseTool<
     url: z.string().describe('请求的 URL'),
   });
 
-  async execute(input: { url: string }): Promise<{
+  protected async executeWithValidation(input: { url: string }): Promise<{
     status: number;
     body: string;
   }> {
